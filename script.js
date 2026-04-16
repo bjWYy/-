@@ -629,3 +629,184 @@ retakeExamBtn.addEventListener('click', startExamMode);
 resultBackHomeBtn.addEventListener('click', hideAllWorkspaces);
 
 init();
+
+
+
+/* ===== Chapter Practice Enhancement ===== */
+(function () {
+  function normalizeChapterName(name) {
+    return (name || '').trim();
+  }
+
+  function getAllQuestionsSafe() {
+    if (Array.isArray(window.questionBank) && window.questionBank.length) return window.questionBank;
+    if (Array.isArray(window.questions) && window.questions.length) return window.questions;
+    if (Array.isArray(window.QUESTION_BANK) && window.QUESTION_BANK.length) return window.QUESTION_BANK;
+    if (typeof allQuestions !== 'undefined' && Array.isArray(allQuestions)) return allQuestions;
+    return [];
+  }
+
+  function uniqueChapters(questions) {
+    const seen = new Set();
+    const out = [];
+    questions.forEach(q => {
+      const s = normalizeChapterName(q.source || q.chapter || q.category || '');
+      if (s && !seen.has(s)) {
+        seen.add(s);
+        out.push(s);
+      }
+    });
+    return out.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+  }
+
+  function ensureChapterPanel() {
+    const questions = getAllQuestionsSafe();
+    if (!questions.length) return;
+
+    const modeGrid = document.querySelector('.mode-grid') || document.querySelector('.mode-grid-3');
+    const modeSection = modeGrid ? modeGrid.closest('.panel') : null;
+    if (!modeGrid || !modeSection) return;
+    if (document.getElementById('chapterPracticePanel')) return;
+
+    const chapters = uniqueChapters(questions);
+    const counts = chapters.map(ch => ({
+      name: ch,
+      count: questions.filter(q => normalizeChapterName(q.source || q.chapter || q.category || '') === ch).length
+    }));
+
+    const panel = document.createElement('section');
+    panel.className = 'panel';
+    panel.id = 'chapterPracticePanel';
+    panel.innerHTML = `
+      <h2>分章节练习</h2>
+      <p class="muted">已将你之前上传的每一个 Word 题库作为一个独立章节。选择章节后，将只从该章节题库中随机抽题练习。</p>
+      <div class="chapter-grid" id="chapterGrid"></div>
+    `;
+
+    modeSection.insertAdjacentElement('afterend', panel);
+
+    const grid = panel.querySelector('#chapterGrid');
+    counts.forEach(item => {
+      const card = document.createElement('button');
+      card.className = 'chapter-card';
+      card.type = 'button';
+      card.innerHTML = `
+        <div class="chapter-card-title">${item.name}</div>
+        <div class="chapter-card-meta">${item.count} 题</div>
+      `;
+      card.addEventListener('click', () => startChapterPractice(item.name));
+      grid.appendChild(card);
+    });
+  }
+
+  function setGlobalQuestionsTemp(filtered) {
+    window.__chapterPracticeQuestions = filtered.slice();
+  }
+
+  function clearGlobalQuestionsTemp() {
+    delete window.__chapterPracticeQuestions;
+  }
+
+  function maybePatchQuestionPool() {
+    if (window.__chapterPracticePatched) return;
+    window.__chapterPracticePatched = true;
+
+    const originalRandomFn = window.getRandomQuestions;
+    if (typeof originalRandomFn === 'function') {
+      window.getRandomQuestions = function (sourceList, count) {
+        const pool = Array.isArray(window.__chapterPracticeQuestions) && window.__chapterPracticeQuestions.length
+          ? window.__chapterPracticeQuestions
+          : sourceList;
+        return originalRandomFn(pool, count);
+      };
+    }
+  }
+
+  function clickByText(text) {
+    const candidates = Array.from(document.querySelectorAll('button, .btn'));
+    const target = candidates.find(el => (el.textContent || '').trim().includes(text));
+    if (target) target.click();
+    return !!target;
+  }
+
+  function startChapterPractice(chapterName) {
+    const questions = getAllQuestionsSafe();
+    const filtered = questions.filter(q => normalizeChapterName(q.source || q.chapter || q.category || '') === chapterName);
+    if (!filtered.length) {
+      alert('该章节暂无可用题目。');
+      return;
+    }
+
+    maybePatchQuestionPool();
+    setGlobalQuestionsTemp(filtered);
+    sessionStorage.setItem('chapterPracticeName', chapterName);
+    sessionStorage.setItem('chapterPracticeCount', String(filtered.length));
+
+    // 优先尝试调用站点原有的练习模式入口
+    if (typeof window.startPracticeMode === 'function') {
+      window.startPracticeMode(filtered);
+      return;
+    }
+    if (typeof window.startPractice === 'function') {
+      window.startPractice(filtered);
+      return;
+    }
+    if (clickByText('练习模式') || clickByText('开始练习')) {
+      setTimeout(() => {
+        const badgeHost = document.querySelector('.quiz-topbar, .question-meta-row, .panel');
+        if (badgeHost && !document.getElementById('chapterPracticeBadge')) {
+          const badge = document.createElement('div');
+          badge.id = 'chapterPracticeBadge';
+          badge.className = 'chapter-badge';
+          badge.textContent = `当前章节：${chapterName}`;
+          badgeHost.appendChild(badge);
+        }
+      }, 100);
+      return;
+    }
+
+    alert('章节已选中，但当前页面未找到练习模式入口按钮。');
+  }
+
+  function injectChapterBadge() {
+    const chapterName = sessionStorage.getItem('chapterPracticeName');
+    if (!chapterName) return;
+    const host = document.querySelector('.quiz-topbar, .question-meta-row, .panel');
+    if (!host || document.getElementById('chapterPracticeBadge')) return;
+    const badge = document.createElement('div');
+    badge.id = 'chapterPracticeBadge';
+    badge.className = 'chapter-badge';
+    badge.textContent = `当前章节：${chapterName}`;
+    host.appendChild(badge);
+  }
+
+  function injectExitChapterButton() {
+    if (document.getElementById('exitChapterPracticeBtn')) return;
+    const host = document.querySelector('.topbar-actions, .result-actions, .nav-card, .quiz-topbar');
+    if (!host) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'exitChapterPracticeBtn';
+    btn.className = 'btn btn-secondary';
+    btn.textContent = '退出章节练习';
+    btn.addEventListener('click', () => {
+      clearGlobalQuestionsTemp();
+      sessionStorage.removeItem('chapterPracticeName');
+      sessionStorage.removeItem('chapterPracticeCount');
+      location.reload();
+    });
+    host.appendChild(btn);
+  }
+
+  function bootChapterEnhancement() {
+    ensureChapterPanel();
+    injectChapterBadge();
+    injectExitChapterButton();
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(bootChapterEnhancement, 50);
+    setTimeout(bootChapterEnhancement, 500);
+    setTimeout(bootChapterEnhancement, 1200);
+  });
+})();
