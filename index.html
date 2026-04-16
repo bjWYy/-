@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>题库练习与考试系统</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="hero">
+      <div>
+        <h1>题库练习与考试系统</h1>
+        <p>支持练习模式、考试模式，以及后台上传与维护题库。</p>
+      </div>
+      <div class="status-card">
+        <div class="status-label">当前题库状态</div>
+        <div id="bankStatus" class="status-value">未加载题库</div>
+      </div>
+    </header>
+
+    <section class="panel">
+      <h2>第一步：确认题库</h2>
+      <p class="hint">系统已内置你上传的题库，可直接开始练习或考试；也支持继续导入新的 JSON 题库覆盖当前数据。</p>
+
+      <div class="import-grid">
+        <div class="import-card">
+          <label class="file-label" for="fileInput">选择 JSON 文件</label>
+          <input id="fileInput" type="file" accept=".json,application/json" />
+          <button id="loadFileBtn" class="btn btn-primary">从文件导入</button>
+        </div>
+
+        <div class="import-card">
+          <label for="jsonInput">粘贴题库 JSON</label>
+          <textarea id="jsonInput" rows="12" placeholder='示例格式：
+[
+  {
+    "type": "single",
+    "question": "下列哪个选项是矩阵的秩？",
+    "options": ["向量长度", "线性无关行或列的最大个数", "特征值个数", "行列式的值"],
+    "answer": ["B"],
+    "knowledgePoint": "线性代数 / 矩阵秩",
+    "explanation": "矩阵的秩定义为线性无关行（或列）的最大个数。"
+  }
+]'></textarea>
+          <button id="loadTextBtn" class="btn btn-primary">从文本导入</button>
+        </div>
+      </div>
+
+      <details class="schema-box">
+        <summary>查看题库格式说明</summary>
+        <div class="schema-content">
+          <p>系统当前支持三类题目：</p>
+          <ul>
+            <li><strong>single</strong>：单选题</li>
+            <li><strong>multiple</strong>：多选题</li>
+            <li><strong>truefalse</strong>：判断题</li>
+          </ul>
+          <p>每道题建议包含以下字段：</p>
+<pre><code>{
+  "type": "single",
+  "question": "题目内容",
+  "options": ["选项A", "选项B", "选项C", "选项D"],
+  "answer": ["B"],
+  "knowledgePoint": "知识点",
+  "explanation": "解析内容",
+  "source": "品牌或分类"
+}</code></pre>
+          <p>其中 <code>answer</code> 统一写成数组；单选题填写一个字母，多选题可填写多个字母，例如 <code>["A", "C"]</code>。</p>
+        </div>
+      </details>
+    </section>
+
+    <section class="panel">
+      <h2>第二步：选择模式</h2>
+      <div class="mode-grid mode-grid-3">
+        <div class="mode-card">
+          <h3>练习模式</h3>
+          <p>随机抽题。作答后立即显示正确答案、知识点与解析。</p>
+          <button id="practiceModeBtn" class="btn btn-secondary">进入练习模式</button>
+        </div>
+        <div class="mode-card">
+          <h3>考试模式</h3>
+          <p>随机抽取 100 题，全部完成后评分。90 分为及格线，并提供逐题解析。</p>
+          <button id="examModeBtn" class="btn btn-secondary">进入考试模式</button>
+        </div>
+        <div class="mode-card admin-highlight">
+          <h3>后台管理</h3>
+          <p>管理员可登录后台，新增、编辑、删除、导入导出题库，并实时查看题型统计。</p>
+          <button id="adminModeBtn" class="btn btn-dark">进入后台管理</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="adminLoginPanel" class="panel hidden">
+      <h2>后台登录</h2>
+      <p class="hint">默认管理员密码：<code>admin123</code>。上线时请在 <code>script.js</code> 中修改。</p>
+      <div class="admin-login-box">
+        <input id="adminPasswordInput" type="password" placeholder="请输入管理员密码" class="text-input" />
+        <button id="adminLoginBtn" class="btn btn-dark">登录后台</button>
+        <button id="adminLoginBackBtn" class="btn btn-light">返回首页</button>
+      </div>
+    </section>
+
+    <section id="adminPanel" class="panel hidden">
+      <div class="quiz-topbar">
+        <div>
+          <div class="mode-title">后台题库管理</div>
+          <div class="progress-text">可新增、编辑、删除题目，并导出当前题库。</div>
+        </div>
+        <div class="topbar-actions">
+          <button id="exportBankBtn" class="btn btn-secondary">导出当前题库</button>
+          <button id="resetBankBtn" class="btn btn-light">恢复内置题库</button>
+          <button id="adminLogoutBtn" class="btn btn-light">退出后台</button>
+        </div>
+      </div>
+
+      <div class="admin-stats-grid" id="adminStatsGrid"></div>
+
+      <div class="admin-layout">
+        <div class="admin-form-card">
+          <h3 id="adminFormTitle">新增题目</h3>
+          <form id="adminQuestionForm" class="admin-form">
+            <label>题目来源
+              <input id="adminSource" class="text-input" type="text" placeholder="例如：爱马仕 / Dior / 通用看点" />
+            </label>
+            <label>题目类型
+              <select id="adminType" class="text-input">
+                <option value="single">单选题</option>
+                <option value="multiple">多选题</option>
+                <option value="truefalse">判断题</option>
+              </select>
+            </label>
+            <label>题干
+              <textarea id="adminQuestion" rows="4" class="text-input" placeholder="请输入题干"></textarea>
+            </label>
+            <label>选项（每行一项，格式如 A. 内容）
+              <textarea id="adminOptions" rows="6" class="text-input" placeholder="A. 选项一&#10;B. 选项二&#10;C. 选项三&#10;D. 选项四"></textarea>
+            </label>
+            <label>正确答案（多个用英文逗号分隔，如 A,C）
+              <input id="adminAnswer" class="text-input" type="text" placeholder="例如：B 或 A,C" />
+            </label>
+            <label>知识点
+              <input id="adminKnowledge" class="text-input" type="text" placeholder="请输入知识点" />
+            </label>
+            <label>解析
+              <textarea id="adminExplanation" rows="4" class="text-input" placeholder="请输入解析"></textarea>
+            </label>
+            <div class="result-actions">
+              <button id="adminSaveBtn" type="submit" class="btn btn-primary">保存题目</button>
+              <button id="adminCancelEditBtn" type="button" class="btn btn-light hidden">取消编辑</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="admin-table-card">
+          <div class="admin-table-toolbar">
+            <input id="adminSearchInput" class="text-input" type="text" placeholder="按题干、来源、知识点搜索" />
+            <select id="adminFilterType" class="text-input compact-input">
+              <option value="all">全部题型</option>
+              <option value="single">单选题</option>
+              <option value="multiple">多选题</option>
+              <option value="truefalse">判断题</option>
+            </select>
+          </div>
+          <div id="adminQuestionList" class="admin-question-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="quizPanel" class="panel hidden">
+      <div class="quiz-topbar">
+        <div>
+          <div id="modeTitle" class="mode-title"></div>
+          <div id="progressText" class="progress-text"></div>
+        </div>
+        <div class="topbar-actions">
+          <button id="restartBtn" class="btn btn-light">重新开始本模式</button>
+          <button id="backHomeBtn" class="btn btn-light">返回首页</button>
+        </div>
+      </div>
+
+      <div id="questionCard" class="question-card"></div>
+      <div id="feedbackCard" class="feedback-card hidden"></div>
+      <div id="navCard" class="nav-card hidden"></div>
+    </section>
+
+    <section id="resultPanel" class="panel hidden">
+      <h2>考试结果</h2>
+      <div id="scoreSummary" class="score-summary"></div>
+      <div id="resultList" class="result-list"></div>
+      <div class="result-actions">
+        <button id="retakeExamBtn" class="btn btn-primary">重新生成考试</button>
+        <button id="resultBackHomeBtn" class="btn btn-light">返回首页</button>
+      </div>
+    </section>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
